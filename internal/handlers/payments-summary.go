@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -16,6 +15,7 @@ type paymentsSummaryHandler struct {
 	l                                                    zerolog.Logger
 	dURL, fURL                                           string
 	influxUrl, influxAdminToken, influxOrg, influxBucket string
+	logger                                               *zerolog.Logger
 }
 
 type stats struct {
@@ -31,6 +31,7 @@ type summaryPayload struct {
 func NewPaymentsSummaryHandler(
 	l zerolog.Logger,
 	dURL, fURL, iURL, iToken, iOrg, iBucket string,
+	logger *zerolog.Logger,
 ) paymentsSummaryHandler {
 	return paymentsSummaryHandler{
 		l:                l,
@@ -40,6 +41,7 @@ func NewPaymentsSummaryHandler(
 		influxAdminToken: iToken,
 		influxOrg:        iOrg,
 		influxBucket:     iBucket,
+		logger:           logger,
 	}
 }
 
@@ -82,7 +84,12 @@ func (h *paymentsSummaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 		result, err := queryAPI.Query(context.Background(), query)
 		if err != nil {
-			log.Printf("query failed for %s/%s: %v", requestType, aggFn, err)
+			h.logger.Error().
+				Str("requestType", requestType).
+				Err(err).
+				Str("aggFn", aggFn).
+				Msg("query failed")
+
 			return 0, 0.0
 		}
 		if result.Next() && result.Record().Value() != nil {

@@ -21,7 +21,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: "125MB"
+          memory: "115MB"
 
   api-02:
     build:
@@ -45,7 +45,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: "125MB"
+          memory: "115MB"
 
   influxdb:
       image: influxdb:2.7
@@ -67,8 +67,8 @@ services:
       deploy:
         resources:
           limits:
-            cpus: "0.25"
-            memory: "50MB"
+            cpus: "0.4"
+            memory: "105MB"
   nginx:
       image: nginx:latest
       container_name: lb
@@ -84,8 +84,8 @@ services:
       deploy:
         resources:
           limits:
-            cpus: "0.25"
-            memory: "50MB"
+            cpus: "0.1"
+            memory: "15MB"
 
 networks:
   backend:

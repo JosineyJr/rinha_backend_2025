@@ -21,10 +21,10 @@ func ChooseProcessor(
 ) (chan structs.ConsolidatePayment, chan structs.ConsolidatePayment) {
 	d, f := make(
 		chan structs.ConsolidatePayment,
-		1000,
+		9000,
 	), make(
 		chan structs.ConsolidatePayment,
-		1000,
+		9000,
 	)
 
 	logger := zerolog.New(
@@ -48,7 +48,7 @@ func ChooseProcessor(
 			if dPoints <= fPoints*3 {
 				d <- structs.ConsolidatePayment{
 					ProcessorURL: dpe,
-					Payload:      bytes.NewBuffer(payload),
+					Payload:      bytes.NewReader(payload),
 					Tag:          structs.DefaultProcessor,
 					Amount:       payment.Amount,
 					RequestedAt:  payment.RequestedAt,
@@ -58,7 +58,7 @@ func ChooseProcessor(
 
 			f <- structs.ConsolidatePayment{
 				ProcessorURL: fpe,
-				Payload:      bytes.NewBuffer(payload),
+				Payload:      bytes.NewReader(payload),
 				Tag:          structs.FallbackProcessor,
 				Amount:       payment.Amount,
 				RequestedAt:  payment.RequestedAt,

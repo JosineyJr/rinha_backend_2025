@@ -13,7 +13,9 @@ import (
 	"github.com/JosineyJr/rinha_backend_2025/internal/pipeline"
 	"github.com/JosineyJr/rinha_backend_2025/internal/structs"
 	"github.com/JosineyJr/rinha_backend_2025/internal/wizard"
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/rs/zerolog"
+	_ "go.uber.org/automaxprocs"
 )
 
 var (
@@ -38,7 +40,7 @@ func main() {
 		zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339},
 	).Level(zerolog.TraceLevel).With().Timestamp().Caller().Logger()
 
-	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 
 	paymentsSummaryHandler := handlers.NewPaymentsSummaryHandler(
 		logger,
@@ -48,16 +50,25 @@ func main() {
 		INFLUXDB_ADMIN_TOKEN,
 		INFLUXDB_ORG,
 		INFLUXDB_BUCKET,
+		&logger,
 	)
 
 	pw := wizard.NewProcessorWizard(
 		PAYMENT_PROCESSOR_URL_DEFAULT+"/payments/service-health",
 		PAYMENT_PROCESSOR_URL_FALLBACK+"/payments/service-health",
+		0.5,
 	)
-	pw.Listen(ctx, 5500*time.Millisecond)
-	paymentsCh := make(chan structs.PaymentsPayload, 500)
+	pw.Listen(ctx, 5200*time.Millisecond)
+	paymentsCh := make(chan structs.PaymentsPayload, 5000)
 
-	for range 4 {
+	go func() {
+		<-ctx.Done()
+		stop()
+		close(paymentsCh)
+		logger.Info().Msg("program exit")
+	}()
+
+	for range 2 {
 		go func() {
 			defaultProcessorCh, fallbackProcessorCh := pipeline.ChooseProcessor(
 				ctx,
@@ -75,12 +86,14 @@ func main() {
 				INFLUXDB_ADMIN_TOKEN,
 				INFLUXDB_ORG,
 				INFLUXDB_BUCKET,
+				&logger,
 			)
 			pipeline.ConsolidatePayment(fallbackProcessorCh,
 				INFLUXDB_URL,
 				INFLUXDB_ADMIN_TOKEN,
 				INFLUXDB_ORG,
 				INFLUXDB_BUCKET,
+				&logger,
 			)
 		}()
 	}
@@ -111,6 +124,30 @@ func main() {
 		w.WriteHeader(http.StatusAccepted)
 	})
 	mux.Handle("GET /payments-summary", &paymentsSummaryHandler)
+
+	client := influxdb2.NewClient(INFLUXDB_URL, INFLUXDB_ADMIN_TOKEN)
+	defer client.Close()
+
+	deleteAPI := client.DeleteAPI()
+	mux.HandleFunc("POST /admin/purge-payments", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Unix(0, 0)
+		stop := time.Now().UTC()
+
+		err := deleteAPI.DeleteWithName(
+			context.Background(),
+			INFLUXDB_ORG,
+			INFLUXDB_BUCKET,
+			start,
+			stop,
+			`_measurement="payments"`,
+		)
+		if err != nil {
+
+			return
+		}
+
+		w.WriteHeader(http.StatusAccepted)
+	})
 
 	fmt.Println("server running")
 	if err := http.ListenAndServe(":"+PORT, mux); err != nil {

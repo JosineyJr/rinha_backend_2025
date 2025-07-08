@@ -20,7 +20,7 @@ type ConsolidatePayment struct {
 	Tag          string
 	Amount       float64
 	ProcessorURL string
-	Payload      *bytes.Buffer
+	Payload      *bytes.Reader
 	RequestedAt  time.Time
 }
 

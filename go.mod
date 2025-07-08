@@ -5,6 +5,7 @@ go 1.24.3
 require (
 	github.com/influxdata/influxdb-client-go/v2 v2.14.0
 	github.com/rs/zerolog v1.34.0
+	go.uber.org/automaxprocs v1.6.0
 )
 
 require (

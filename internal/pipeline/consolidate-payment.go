@@ -3,7 +3,6 @@ package pipeline
 import (
 	"crypto/tls"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/JosineyJr/rinha_backend_2025/internal/structs"
@@ -14,23 +13,25 @@ import (
 func ConsolidatePayment(
 	paymentsCh <-chan structs.ConsolidatePayment,
 	influxUrl, influxAdminToken, influxOrg, influxBucket string,
+	logger *zerolog.Logger,
 ) {
 	httpClient := http.Client{
 		Transport: &http.Transport{
+			MaxIdleConns:    500,
+			IdleConnTimeout: 10 * time.Second,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 			},
 		},
+		Timeout: 15 * time.Second,
 	}
-
-	logger := zerolog.New(
-		zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339},
-	).Level(zerolog.TraceLevel).With().Timestamp().Caller().Logger()
 
 	influxClient := influxdb2.NewClient(influxUrl, influxAdminToken)
 
 	go func() {
 		defer influxClient.Close()
+
+		wApi := influxClient.WriteAPI(influxOrg, influxBucket)
 
 		for consolidate := range paymentsCh {
 			_, err := httpClient.Post(
@@ -43,17 +44,16 @@ func ConsolidatePayment(
 				continue
 			}
 
-			wApi := influxClient.WriteAPI(influxOrg, influxBucket)
 			p := influxdb2.NewPointWithMeasurement("payments").
 				AddTag("type", consolidate.Tag).
 				AddField("amount", consolidate.Amount).
 				SetTime(consolidate.RequestedAt)
 			wApi.WritePoint(p)
+			wApi.Flush()
 
-			logger.Info().
-				Str("message", "payment consolidated").
-				Str("processor", consolidate.ProcessorURL).
-				Send()
+			// logger.Info().
+			// 	Str("processor", consolidate.ProcessorURL).
+			// 	Msg("payment consolidated")
 		}
 	}()
 }
