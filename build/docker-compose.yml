@@ -5,13 +5,19 @@ services:
       dockerfile: ./build/Dockerfile # Point to the Dockerfile within the build folder
     container_name: rinha-api-dev
     networks:
+      - payment-processor
       - backend
     environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=http://192.168.3.133:8001
-      - PAYMENT_PROCESSOR_URL_FALLBACK=http://192.168.3.133:8002
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - INFLUXDB_URL=http://rinha-influxdb-dev:8086
+      - INFLUXDB_ADMIN_TOKEN=4qooWJYOHSDdqnzs9vW9Xoxn3QZbS6yd5inEwM4JC8RERi0J-Kn9ALYG5Ppi0vZMYHBf_necJIYFsKhNR2Ib9g==
+      - INFLUXDB_ORG=my-org
+      - INFLUXDB_BUCKET=payments-summary
+      - INFLUXDB_USERNAME=myuser
+      - INFLUXDB_PASSWORD=mysupersecretpassword
     ports:
       - "9999:9999"
-      - "2345:2345"
     volumes:
       - ../:/app
   influxdb:
@@ -27,7 +33,7 @@ services:
         - DOCKER_INFLUXDB_INIT_USERNAME=myuser
         - DOCKER_INFLUXDB_INIT_PASSWORD=mysupersecretpassword
         - DOCKER_INFLUXDB_INIT_ORG=my-org
-        - DOCKER_INFLUXDB_INIT_BUCKET=my-bucket
+        - DOCKER_INFLUXDB_INIT_BUCKET=payments-summary
         - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=4qooWJYOHSDdqnzs9vW9Xoxn3QZbS6yd5inEwM4JC8RERi0J-Kn9ALYG5Ppi0vZMYHBf_necJIYFsKhNR2Ib9g==
       networks:
         - backend
@@ -35,3 +41,5 @@ services:
 networks:
   backend:
     driver: bridge
+  payment-processor:
+    external: true

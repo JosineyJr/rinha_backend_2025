@@ -1,18 +1,25 @@
-FROM golang:1.24-alpine
+FROM golang:1.24-alpine AS builder
+
 WORKDIR /app
 
-RUN apk add --no-cache git
-RUN go install github.com/air-verse/air@latest
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
-
-# Correctly copy from the build context (project root)
 COPY go.mod go.sum ./
+
 RUN go mod download
 
-# Copy the entire project
-COPY ../. .
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o ./tmp/main ./cmd/api/main.go
+
+FROM alpine:latest
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+WORKDIR /app
+
+COPY --from=builder /app/tmp/main .
 
 EXPOSE 9999
-EXPOSE 2345
 
-CMD ["air"]
+
+CMD ["./tmp/main"]
