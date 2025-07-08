@@ -42,7 +42,7 @@ func (h *HealthChecker) pingConnection(ctx context.Context) {
 	defer ticker.Stop()
 
 	for {
-		ctxPing, cancelPing := context.WithTimeout(ctx, h.timeout)
+		ctxPing, cancelPing := context.WithTimeout(ctx, time.Second)
 
 		go func() {
 			pingsErr <- h.pingFn(ctxPing)
