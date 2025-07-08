@@ -17,11 +17,12 @@ import (
 )
 
 var (
-	PAYMENT_PROCESSOR_URL_DEFAULT, PAYMENT_PROCESSOR_URL_FALLBACK, INFLUXDB_ADMIN_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_URL string
-	PAYMENT_PROCESSOR_TAX_DEFAULT, PAYMENT_PROCESSOR_TAX_FALLBACK                                                                    float32
+	PORT, PAYMENT_PROCESSOR_URL_DEFAULT, PAYMENT_PROCESSOR_URL_FALLBACK, INFLUXDB_ADMIN_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_URL string
+	PAYMENT_PROCESSOR_TAX_DEFAULT, PAYMENT_PROCESSOR_TAX_FALLBACK                                                                          float32
 )
 
 func init() {
+	PORT = os.Getenv("PORT")
 	PAYMENT_PROCESSOR_URL_DEFAULT = os.Getenv("PAYMENT_PROCESSOR_URL_DEFAULT")
 	PAYMENT_PROCESSOR_URL_FALLBACK = os.Getenv("PAYMENT_PROCESSOR_URL_FALLBACK")
 	PAYMENT_PROCESSOR_TAX_DEFAULT = 0.05
@@ -54,9 +55,9 @@ func main() {
 		PAYMENT_PROCESSOR_URL_FALLBACK+"/payments/service-health",
 	)
 	pw.Listen(ctx, 5500*time.Millisecond)
-	paymentsCh := make(chan structs.PaymentsPayload, 1000)
+	paymentsCh := make(chan structs.PaymentsPayload, 500)
 
-	for range 8 {
+	for range 4 {
 		go func() {
 			defaultProcessorCh, fallbackProcessorCh := pipeline.ChooseProcessor(
 				ctx,
@@ -112,7 +113,7 @@ func main() {
 	mux.Handle("GET /payments-summary", &paymentsSummaryHandler)
 
 	fmt.Println("server running")
-	if err := http.ListenAndServe(":9999", mux); err != nil {
+	if err := http.ListenAndServe(":"+PORT, mux); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
