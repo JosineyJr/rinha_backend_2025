@@ -2,3 +2,4 @@
 .vscode
 build/influxdb
 build/tmp
+tmp
