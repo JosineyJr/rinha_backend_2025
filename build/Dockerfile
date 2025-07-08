@@ -8,7 +8,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o ./tmp/main ./cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOGC=off GOMEMLIMIT=200MiB go build -ldflags="-w -s" -o ./tmp/main ./cmd/api/main.go
 
 FROM alpine:latest
 
@@ -21,5 +21,4 @@ COPY --from=builder /app/tmp/main .
 
 EXPOSE 9999
 
-
-CMD ["./tmp/main"]
+CMD ["./main"]

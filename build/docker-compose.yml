@@ -18,8 +18,6 @@ services:
       - INFLUXDB_PASSWORD=mysupersecretpassword
     ports:
       - "9999:9999"
-    volumes:
-      - ../:/app
   influxdb:
       image: influxdb:2.7
       container_name: rinha-influxdb-dev

@@ -7,7 +7,7 @@ x-service-templates:
       resources:
         limits:
           cpus: "1.5"
-          memory: "100MB"
+          memory: "500MB"
   
   payment-processor-db: &payment-processor-db
     image: postgres:17-alpine
