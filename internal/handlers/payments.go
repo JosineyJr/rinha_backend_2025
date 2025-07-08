@@ -16,7 +16,8 @@ type paymentHandler struct {
 	l                                                    zerolog.Logger
 	dURL, fURL                                           string
 	http                                                 http.Client
-	hc                                                   *health.HealthChecker
+	defaultProcessorHc                                   *health.HealthChecker
+	fallbackProcessorHc                                  *health.HealthChecker
 	influxUrl, influxAdminToken, influxOrg, influxBucket string
 }
 
@@ -34,18 +35,20 @@ var (
 func NewPaymentHandler(
 	l zerolog.Logger,
 	dURL, fURL string,
-	hc *health.HealthChecker,
+	defaultProcessorHc *health.HealthChecker,
+	fallbackProcessorHc *health.HealthChecker,
 	iURL, iToken, iOrg, iBucket string,
 ) paymentHandler {
 	return paymentHandler{
-		l:                l,
-		dURL:             dURL,
-		fURL:             fURL,
-		hc:               hc,
-		influxUrl:        iURL,
-		influxBucket:     iBucket,
-		influxOrg:        iOrg,
-		influxAdminToken: iToken,
+		l:                   l,
+		dURL:                dURL,
+		fURL:                fURL,
+		defaultProcessorHc:  defaultProcessorHc,
+		fallbackProcessorHc: fallbackProcessorHc,
+		influxUrl:           iURL,
+		influxBucket:        iBucket,
+		influxOrg:           iOrg,
+		influxAdminToken:    iToken,
 		http: http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -86,12 +89,14 @@ func (h *paymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	url := h.dURL
 	tag := dProcessor
-	if h.hc.IsIll {
+	if h.defaultProcessorHc.IsIll {
 		if payload.Amount > 100 {
-			h.hc.WaitForHealing()
+			h.defaultProcessorHc.WaitForHealing()
+		} else {
+			h.fallbackProcessorHc.WaitForHealing()
+			url = h.fURL
+			tag = fProcessor
 		}
-		url = h.fURL
-		tag = fProcessor
 	}
 
 	payloadBuffer := bytes.NewBuffer(payloadBytes)

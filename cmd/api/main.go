@@ -33,10 +33,20 @@ func main() {
 
 	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 
-	paymentsHc := health.NewHealthChecker(
+	defaultProcessorHc := health.NewHealthChecker(
 		ctx,
 		5*time.Second,
 		health.CheckPaymentProcessor(ctx, PAYMENT_PROCESSOR_URL_DEFAULT+"/payments/service-health"),
+		logger,
+	)
+
+	fallbackProcessorHc := health.NewHealthChecker(
+		ctx,
+		5*time.Second,
+		health.CheckPaymentProcessor(
+			ctx,
+			PAYMENT_PROCESSOR_URL_FALLBACK+"/payments/service-health",
+		),
 		logger,
 	)
 
@@ -44,7 +54,8 @@ func main() {
 		logger,
 		PAYMENT_PROCESSOR_URL_DEFAULT+"/payments",
 		PAYMENT_PROCESSOR_URL_FALLBACK+"/payments",
-		paymentsHc,
+		defaultProcessorHc,
+		fallbackProcessorHc,
 		INFLUXDB_URL,
 		INFLUXDB_ADMIN_TOKEN,
 		INFLUXDB_ORG,
