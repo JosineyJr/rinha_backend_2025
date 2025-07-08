@@ -56,8 +56,8 @@ func (h *HealthChecker) pingConnection(ctx context.Context) {
 			return
 		case <-ctxPing.Done():
 			h.setHealth(true)
-			<-ticker.C
 			h.log.Error().Err(ctxPing.Err()).Send()
+			<-ticker.C
 			continue
 		case err := <-pingsErr:
 			if err != nil {
