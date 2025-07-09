@@ -1,7 +1,6 @@
 package structs
 
 import (
-	"bytes"
 	"time"
 )
 
@@ -18,10 +17,8 @@ type PaymentsPayload struct {
 
 type ConsolidatePayment struct {
 	Tag          string
-	Amount       float64
 	ProcessorURL string
-	Payload      *bytes.Reader
-	RequestedAt  time.Time
+	Payload      *PaymentsPayload
 }
 
 type ServiceHealthPayload struct {

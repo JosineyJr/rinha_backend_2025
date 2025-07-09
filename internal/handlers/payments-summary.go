@@ -13,7 +13,6 @@ import (
 
 type paymentsSummaryHandler struct {
 	l                                                    zerolog.Logger
-	dURL, fURL                                           string
 	influxUrl, influxAdminToken, influxOrg, influxBucket string
 	logger                                               *zerolog.Logger
 }
@@ -30,13 +29,11 @@ type summaryPayload struct {
 
 func NewPaymentsSummaryHandler(
 	l zerolog.Logger,
-	dURL, fURL, iURL, iToken, iOrg, iBucket string,
+	iURL, iToken, iOrg, iBucket string,
 	logger *zerolog.Logger,
 ) paymentsSummaryHandler {
 	return paymentsSummaryHandler{
 		l:                l,
-		dURL:             dURL,
-		fURL:             fURL,
 		influxUrl:        iURL,
 		influxAdminToken: iToken,
 		influxOrg:        iOrg,

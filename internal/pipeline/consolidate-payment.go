@@ -1,7 +1,9 @@
 package pipeline
 
 import (
+	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -34,10 +36,17 @@ func ConsolidatePayment(
 		wApi := influxClient.WriteAPI(influxOrg, influxBucket)
 
 		for consolidate := range paymentsCh {
-			_, err := httpClient.Post(
+
+			payload, err := json.Marshal(consolidate.Payload)
+			if err != nil {
+				logger.Error().Err(err).Send()
+				return
+			}
+
+			_, err = httpClient.Post(
 				consolidate.ProcessorURL,
 				"application/json",
-				consolidate.Payload,
+				bytes.NewReader(payload),
 			)
 			if err != nil {
 				logger.Error().Err(err).Send()
@@ -46,8 +55,8 @@ func ConsolidatePayment(
 
 			p := influxdb2.NewPointWithMeasurement("payments").
 				AddTag("type", consolidate.Tag).
-				AddField("amount", consolidate.Amount).
-				SetTime(consolidate.RequestedAt)
+				AddField("amount", consolidate.Payload.Amount).
+				SetTime(consolidate.Payload.RequestedAt)
 			wApi.WritePoint(p)
 			wApi.Flush()
 

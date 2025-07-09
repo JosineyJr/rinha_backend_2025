@@ -1,32 +1,36 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
 	"time"
 
 	"github.com/JosineyJr/rinha_backend_2025/internal/handlers"
-	"github.com/JosineyJr/rinha_backend_2025/internal/pipeline"
 	"github.com/JosineyJr/rinha_backend_2025/internal/structs"
 	"github.com/JosineyJr/rinha_backend_2025/internal/wizard"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/rs/zerolog"
-	_ "go.uber.org/automaxprocs"
 )
 
 var (
-	PORT, PAYMENT_PROCESSOR_URL_DEFAULT, PAYMENT_PROCESSOR_URL_FALLBACK, INFLUXDB_ADMIN_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_URL string
-	PAYMENT_PROCESSOR_TAX_DEFAULT, PAYMENT_PROCESSOR_TAX_FALLBACK                                                                          float32
+	PORT, PAYMENTS_PROCESSOR_URL_DEFAULT, PAYMENTS_PROCESSOR_URL_FALLBACK, SUMMARY_PROCESSOR_URL_DEFAULT                                                           string
+	SUMMARY_PROCESSOR_URL_FALLBACK, HEALTH_PROCESSOR_URL_DEFAULT, HEALTH_PROCESSOR_URL_FALLBACK, INFLUXDB_ADMIN_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_URL string
+	PAYMENT_PROCESSOR_TAX_DEFAULT, PAYMENT_PROCESSOR_TAX_FALLBACK                                                                                                  float32
 )
 
 func init() {
 	PORT = os.Getenv("PORT")
-	PAYMENT_PROCESSOR_URL_DEFAULT = os.Getenv("PAYMENT_PROCESSOR_URL_DEFAULT")
-	PAYMENT_PROCESSOR_URL_FALLBACK = os.Getenv("PAYMENT_PROCESSOR_URL_FALLBACK")
+	PAYMENTS_PROCESSOR_URL_DEFAULT = os.Getenv("PAYMENTS_PROCESSOR_URL_DEFAULT")
+	PAYMENTS_PROCESSOR_URL_FALLBACK = os.Getenv("PAYMENTS_PROCESSOR_URL_FALLBACK")
+	SUMMARY_PROCESSOR_URL_DEFAULT = os.Getenv("SUMMARY_PROCESSOR_URL_DEFAULT")
+	SUMMARY_PROCESSOR_URL_FALLBACK = os.Getenv("SUMMARY_PROCESSOR_URL_FALLBACK")
+	HEALTH_PROCESSOR_URL_DEFAULT = os.Getenv("HEALTH_PROCESSOR_URL_DEFAULT")
+	HEALTH_PROCESSOR_URL_FALLBACK = os.Getenv("HEALTH_PROCESSOR_URL_FALLBACK")
 	PAYMENT_PROCESSOR_TAX_DEFAULT = 0.05
 	PAYMENT_PROCESSOR_TAX_FALLBACK = 0.15
 	INFLUXDB_ADMIN_TOKEN = os.Getenv("INFLUXDB_ADMIN_TOKEN")
@@ -40,12 +44,8 @@ func main() {
 		zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339},
 	).Level(zerolog.TraceLevel).With().Timestamp().Caller().Logger()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-
 	paymentsSummaryHandler := handlers.NewPaymentsSummaryHandler(
 		logger,
-		PAYMENT_PROCESSOR_URL_DEFAULT+"/payments-summary",
-		PAYMENT_PROCESSOR_URL_FALLBACK+"/payments-summary",
 		INFLUXDB_URL,
 		INFLUXDB_ADMIN_TOKEN,
 		INFLUXDB_ORG,
@@ -54,47 +54,75 @@ func main() {
 	)
 
 	pw := wizard.NewProcessorWizard(
-		PAYMENT_PROCESSOR_URL_DEFAULT+"/payments/service-health",
-		PAYMENT_PROCESSOR_URL_FALLBACK+"/payments/service-health",
+		HEALTH_PROCESSOR_URL_DEFAULT,
+		HEALTH_PROCESSOR_URL_FALLBACK,
 		0.5,
 	)
-	pw.Listen(ctx, 5200*time.Millisecond)
-	paymentsCh := make(chan structs.PaymentsPayload, 5000)
-
-	go func() {
-		<-ctx.Done()
-		stop()
-		close(paymentsCh)
-		logger.Info().Msg("program exit")
-	}()
+	pw.Listen(context.Background(), 5200*time.Millisecond)
+	paymentsCh := make(chan *structs.PaymentsPayload, 30_000)
 
 	for range 2 {
 		go func() {
-			defaultProcessorCh, fallbackProcessorCh := pipeline.ChooseProcessor(
-				ctx,
-				paymentsCh,
-				&pw,
-				PAYMENT_PROCESSOR_TAX_DEFAULT,
-				PAYMENT_PROCESSOR_TAX_FALLBACK,
-				PAYMENT_PROCESSOR_URL_DEFAULT+"/payments",
-				PAYMENT_PROCESSOR_URL_FALLBACK+"/payments",
-			)
+			influxClient := influxdb2.NewClient(INFLUXDB_URL, INFLUXDB_ADMIN_TOKEN)
+			wApi := influxClient.WriteAPI(INFLUXDB_ORG, INFLUXDB_BUCKET)
+			defer influxClient.Close()
 
-			pipeline.ConsolidatePayment(
-				defaultProcessorCh,
-				INFLUXDB_URL,
-				INFLUXDB_ADMIN_TOKEN,
-				INFLUXDB_ORG,
-				INFLUXDB_BUCKET,
-				&logger,
-			)
-			pipeline.ConsolidatePayment(fallbackProcessorCh,
-				INFLUXDB_URL,
-				INFLUXDB_ADMIN_TOKEN,
-				INFLUXDB_ORG,
-				INFLUXDB_BUCKET,
-				&logger,
-			)
+			httpClient := http.Client{
+				Transport: &http.Transport{
+					MaxIdleConns:    500,
+					IdleConnTimeout: 2 * time.Second,
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: true,
+					},
+				},
+				Timeout: 10 * time.Second,
+			}
+
+			for payment := range paymentsCh {
+				payload, err := json.Marshal(payment)
+				if err != nil {
+					paymentsCh <- payment
+					continue
+				}
+
+				tag := structs.DefaultProcessor
+				if float64(
+					pw.DefaultMinResponseTime.Load(),
+				)*payment.Amount*float64(
+					PAYMENT_PROCESSOR_TAX_DEFAULT,
+				) <= float64(
+					pw.FallbackMinResponseTime.Load(),
+				)*payment.Amount*float64(
+					PAYMENT_PROCESSOR_TAX_FALLBACK,
+				)*float64(PAYMENT_PROCESSOR_TAX_DEFAULT/PAYMENT_PROCESSOR_TAX_FALLBACK) {
+					_, err = httpClient.Post(
+						PAYMENTS_PROCESSOR_URL_DEFAULT,
+						"application/json",
+						bytes.NewReader(payload),
+					)
+					if err != nil {
+						paymentsCh <- payment
+						continue
+					}
+				} else {
+					tag = structs.FallbackProcessor
+					_, err = httpClient.Post(
+						PAYMENTS_PROCESSOR_URL_FALLBACK,
+						"application/json",
+						bytes.NewReader(payload),
+					)
+					if err != nil {
+						paymentsCh <- payment
+						continue
+					}
+				}
+
+				p := influxdb2.NewPointWithMeasurement("payments").
+					AddTag("type", tag).
+					AddField("amount", payment.Amount).
+					SetTime(payment.RequestedAt)
+				wApi.WritePoint(p)
+			}
 		}()
 	}
 
@@ -119,7 +147,7 @@ func main() {
 			return
 		}
 		payload.RequestedAt = time.Now().UTC()
-		paymentsCh <- payload
+		paymentsCh <- &payload
 
 		w.WriteHeader(http.StatusAccepted)
 	})

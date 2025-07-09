@@ -1,15 +1,15 @@
 services:
   api-01:
-    build:
-      context: ../ 
-      dockerfile: ./build/Dockerfile # Point to the Dockerfile within the build folder
+    image: josiney/rdb25_02:latest
     hostname: rinha-api-dev-01
     networks:
       - payment-processor
       - backend
     environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - PAYMENTS_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080/payments
+      - PAYMENTS_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080/payments
+      - HEALTH_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080/payments/service-health
+      - HEALTH_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080/payments/service-health
       - INFLUXDB_URL=http://rinha-influxdb-dev:8086
       - INFLUXDB_ADMIN_TOKEN=4qooWJYOHSDdqnzs9vW9Xoxn3QZbS6yd5inEwM4JC8RERi0J-Kn9ALYG5Ppi0vZMYHBf_necJIYFsKhNR2Ib9g==
       - INFLUXDB_ORG=my-org
@@ -20,20 +20,20 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: "115MB"
+          cpus: "0.25"
+          memory: "50MB"
 
   api-02:
-    build:
-      context: ../ 
-      dockerfile: ./build/Dockerfile # Point to the Dockerfile within the build folder
+    image: josiney/rdb25_02:latest
     hostname: rinha-api-dev-02
     networks:
       - payment-processor
       - backend
     environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - PAYMENTS_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080/payments
+      - PAYMENTS_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080/payments
+      - HEALTH_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080/payments/service-health
+      - HEALTH_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080/payments/service-health
       - INFLUXDB_URL=http://rinha-influxdb-dev:8086
       - INFLUXDB_ADMIN_TOKEN=4qooWJYOHSDdqnzs9vW9Xoxn3QZbS6yd5inEwM4JC8RERi0J-Kn9ALYG5Ppi0vZMYHBf_necJIYFsKhNR2Ib9g==
       - INFLUXDB_ORG=my-org
@@ -44,11 +44,59 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: "115MB"
+          cpus: "0.25"
+          memory: "50MB"
+
+  api-03:
+    image: josiney/rdb25_02:latest
+    hostname: rinha-api-dev-03
+    networks:
+      - payment-processor
+      - backend
+    environment:
+      - PAYMENTS_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080/payments
+      - PAYMENTS_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080/payments
+      - HEALTH_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080/payments/service-health
+      - HEALTH_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080/payments/service-health
+      - INFLUXDB_URL=http://rinha-influxdb-dev:8086
+      - INFLUXDB_ADMIN_TOKEN=4qooWJYOHSDdqnzs9vW9Xoxn3QZbS6yd5inEwM4JC8RERi0J-Kn9ALYG5Ppi0vZMYHBf_necJIYFsKhNR2Ib9g==
+      - INFLUXDB_ORG=my-org
+      - INFLUXDB_BUCKET=payments-summary
+      - INFLUXDB_USERNAME=myuser
+      - INFLUXDB_PASSWORD=mysupersecretpassword
+      - PORT=9996
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: "50MB"
+
+  api-04:
+    image: josiney/rdb25_02:latest
+    hostname: rinha-api-dev-04
+    networks:
+      - payment-processor
+      - backend
+    environment:
+      - PAYMENTS_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080/payments
+      - PAYMENTS_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080/payments
+      - HEALTH_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080/payments/service-health
+      - HEALTH_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080/payments/service-health
+      - INFLUXDB_URL=http://rinha-influxdb-dev:8086
+      - INFLUXDB_ADMIN_TOKEN=4qooWJYOHSDdqnzs9vW9Xoxn3QZbS6yd5inEwM4JC8RERi0J-Kn9ALYG5Ppi0vZMYHBf_necJIYFsKhNR2Ib9g==
+      - INFLUXDB_ORG=my-org
+      - INFLUXDB_BUCKET=payments-summary
+      - INFLUXDB_USERNAME=myuser
+      - INFLUXDB_PASSWORD=mysupersecretpassword
+      - PORT=9995
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: "50MB"
 
   influxdb:
-      image: influxdb:2.7
+      image: influxdb:alpine
       container_name: rinha-influxdb-dev
       ports:
         - "8086:8086"
@@ -68,9 +116,9 @@ services:
         resources:
           limits:
             cpus: "0.4"
-            memory: "105MB"
+            memory: "135MB"
   nginx:
-      image: nginx:latest
+      image: nginx:1.25-alpine
       container_name: lb
       volumes:
         - ./nginx.conf:/etc/nginx/nginx.conf:ro
@@ -79,6 +127,8 @@ services:
       depends_on:
         - api-01
         - api-02
+        - api-03
+        - api-04
       networks:
         - backend
       deploy:
@@ -89,6 +139,7 @@ services:
 
 networks:
   backend:
+    name: rinha-backend
     driver: bridge
   payment-processor:
     external: true
